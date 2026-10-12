@@ -21,9 +21,15 @@
       containerUser = "${toString containerUid}:${toString containerGid}";
       toolboxesRevision = self.rev or self.dirtyRev or "unknown";
       gufoRevision = gufo-engine.rev or "unknown";
+      # Use the source timestamp instead of dockerTools' epoch default, while
+      # keeping image metadata reproducible for a given source revision.
+      sourceDate = self.lastModifiedDate;
+      datePart = offset: length: builtins.substring offset length sourceDate;
+      imageCreated = "${datePart 0 4}-${datePart 4 2}-${datePart 6 2}T${datePart 8 2}:${datePart 10 2}:${datePart 12 2}Z";
       imageMetadata = version: {
         imageTag = version;
         imageLabels = {
+          "org.opencontainers.image.created" = imageCreated;
           "org.opencontainers.image.version" = version;
           "org.opencontainers.image.revision" = toolboxesRevision;
           "org.opencontainers.image.source" = "https://github.com/gufo-org/toolboxes";
@@ -113,10 +119,13 @@
         "NIX_PAGER=cat"
       ];
 
-      gpuEnv = system: commonEnv system ++ [
-        "ROCM_PATH=${pkgs.${system}.rocmPackages.clr}"
-        "HIP_PLATFORM=amd"
-      ];
+      gpuEnv =
+        system:
+        commonEnv system
+        ++ [
+          "ROCM_PATH=${pkgs.${system}.rocmPackages.clr}"
+          "HIP_PLATFORM=amd"
+        ];
 
       imageModules = forAllSystems (
         system:
@@ -126,22 +135,29 @@
             inherit
               p
               containerUser
+              imageCreated
               ociFilesystemCommands
               ;
             commonRuntimePkgs = commonRuntimePkgs system;
           };
-          modules =
-            variant: image: engine:
-            [
-              (import ./nix/gufo-runtime.nix (shared // image // {
+          modules = variant: image: engine: [
+            (import ./nix/gufo-runtime.nix (
+              shared
+              // image
+              // {
                 inherit engine commonArchiveOwnershipCommands variant;
                 gpuEnv = gpuEnv system;
-              }))
-              (import ./nix/gufo-dev.nix (shared // image // {
+              }
+            ))
+            (import ./nix/gufo-dev.nix (
+              shared
+              // image
+              // {
                 inherit engine commonArchiveOwnershipCommands variant;
                 gpuEnv = gpuEnv system;
-              }))
-            ];
+              }
+            ))
+          ];
         in
         modules null edgeImage gufo-engine.packages.${system}.default
         ++ modules "release" releaseImage gufo-engine.packages.${system}.release

@@ -7,6 +7,7 @@
   containerUser,
   gpuEnv,
   imageTag,
+  imageCreated,
   imageLabels,
   variant ? null,
 }:
@@ -15,10 +16,12 @@ let
   imageArgs = {
     name = "ghcr.io/gufo-org/toolboxes/gufo-runtime";
     tag = imageTag;
+    created = imageCreated;
     contents = [
       engine
       p.radeontop
-    ] ++ commonRuntimePkgs;
+    ]
+    ++ commonRuntimePkgs;
     extraCommands = ociFilesystemCommands;
     fakeRootCommands = commonArchiveOwnershipCommands;
     config = {
