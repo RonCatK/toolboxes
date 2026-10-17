@@ -43,12 +43,18 @@ jobs:
       - name: Load, verify, push
         run: |
           set -euo pipefail
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
-          target="ghcr.io/${owner}/gufo-runtime:pr350-${GUFO_REV:0:8}"
+          # Repo-scoped package name, like upstream's own workflows
+          # (ghcr.io/<owner>/<repo>/gufo-runtime): a user-level name not tied to
+          # this repo failed with "unknown blob" at the end of the first push.
+          target="ghcr.io/${GITHUB_REPOSITORY,,}/gufo-runtime:pr350-${GUFO_REV:0:8}"
           docker load < result
           # nix module hardcodes the upstream name; retag, never push that name
           docker tag ghcr.io/gufo-org/toolboxes/gufo-runtime:edge "$target"
           docker run --rm "$target" gufo --version | tee version.txt
           grep -F "(${GUFO_REV:0:7})" version.txt
           docker inspect --format '{{ index .Config.Labels "org.gufo.engine.revision" }}' "$target" | grep -Fx "$GUFO_REV"
-          docker push "$target"
+          for attempt in 1 2 3; do
+            if docker push "$target"; then break; fi
+            [ "$attempt" = 3 ] && exit 1
+            echo "push attempt $attempt failed; retrying in 30 s"; sleep 30
+          done
